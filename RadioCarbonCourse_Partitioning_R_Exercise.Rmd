@@ -1,0 +1,543 @@
+---
+title: 'Radiocarbon Course: Isotopic Partitioning Models'
+author: "Marguerite Mauritz"
+date: "21 August 2021"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    toc_depth: 2
+---
+
+#Overview
+In this exercise, we will compare the estimated relative contributions from plant and soil respiration sources using a single- and dual-isotope partitioning model. The purpose of this lab is to examine the model definition in JAGS and explore the output. [JAGS](https://mcmc-jags.sourceforge.io/) is a freely licensed Bayesian Hierarchical model program  that can be run in R using [R2jags](https://cran.r-project.org/web/packages/R2jags/index.html). We will not be installing JAGS and R2jags on everyone’s computer, however we will provide the code should you want to try this on your own. Some helpful directions for installing the necessary programs can be found [here](https://blogs.uoregon.edu/bayesclub/tag/r2jags/). Instead, we will focus on understanding and interpreting the partitioning model output. 
+
+#Background
+A little bit about the system (recap from Elaine’s slides)
+
+Picture of 13C/14C end-members....need to find the graph!!
+
+
+#Questions
+1. What is the relative contribution from plant (above-ground and below-ground) and soil (young soil and old soil) sources to total ecosystem respiration, using 14C to separate sources?  
+2. How does the addition of 13C isotopes to the partitioning model affect the relative estimates of plant (above-ground and below-ground) and soil (young soil and old soil) respiration?  
+
+
+#The Data
+Data from this exercise is based on [Pegoraro et al 2020](https://doi.org/https://doi.org/10.1111/gcb.15481).  
+
+Install the following data files in the same directory (folder) as the Rmd code. R will read files from the same path and you will not have to change the working directory: 
+
+```{r, create a table for data files to import, echo=FALSE}
+# won't display in-line in Rmd but will knit to html
+
+# create data to display file info
+table.data <- data.frame(File.Name=c("Model_14C_output.csv", "Model_14C_13C_output.csv"),
+                         File.Description=c("Plot-level relative proportions of AG, BG, OS, YS using 14C partitioning", "Plot-level relative proportions of AG, BG, OS, YS using 14C and 13C partitioning"))
+
+# print table with nicer header names
+knitr::kable(table.data, col.names=gsub("[.]", " ", names(table.data)))
+
+```
+
+# Activity Preparation: Load libraries
+If these libraries are not installed on your computer, install them using `install.packages(dplyr)`,`install.packages(ggplot2)`, etc. or manually install them from the 'Packages' tab in RStudio.  
+```{r, load or install packages, message=FALSE}
+library(dplyr) # organise and examine data
+library(ggplot2) # make plots
+library(gridExtra) # for combining final plots at the end
+```
+
+
+# Part 1: Relative Source Contributions in the Single ^14^C Isotope Model
+
+## Import data
+For part 1, import the data from the single isotope model.  
+Use `model.single <- read.csv("FILE NAME.csv")` to load the correct dataset.  
+```{r, import the data model.single, echo=TRUE}
+# add name of 
+model.single <- read.csv("Model_14C_output.csv")
+```
+
+## Examine data structure
+
+The model outputs estimated variable values in seperate rows, each row has a name and index according to the parameter definitions in the model. The data is organised by variable name, in alphabetical order.  
+To use the output, we need to extract relevant parameters based on their row position. 
+
+```{r, look at data structure for model.single}
+# use glimpse() to look at the data structure
+glimpse(model.single)
+```
+
+```{r, look at the variable names for model.single}
+# look at the variable names and orders by calling only the variable column
+model.single$variable
+```
+
+##### a. Refer back to the model definition, what does each variable value and row represent?  
+A:  
+B:  
+etc.  
+
+## Extract the relative AG, BG, OS, YS proporation estimates for each plot
+Use the row indices in model.single to extract only the relative flux contributions. Combine them into a single data frame using `rbind()`.  
+Eg:  
+`proportions.single <- rbind(model.single[22:63,],
+                            model.single[row start : row end,],
+                            model.single[row start : row end,],
+                            model.single[row start : row end,])`
+
+```{r, create dataframe of relative proportions in model.single}
+proportions.single <- rbind(model.single[22:63,],
+                            model.single[65:106,],
+                            model.single[108:149,],
+                            model.single[151:192,])
+```
+
+Now create a column called 'source' to group all observations from a single source under the same name and begin plotting the data. The function [grepl()](https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/grep) searches for pattern matches in a string of characters.  
+```{r, create a source column in proportions.single to group sources}
+proportions.single <- proportions.single %>%
+  mutate (source = case_when(grepl("PAG", variable) ~ "Aboveground",
+                             grepl("PBG", variable) ~ "Belowground",
+                             grepl("POS", variable) ~ "OldSoil",
+                             grepl("PYS", variable) ~ "YoungSoil"))
+
+```
+
+## Graph the plot-level estimates 
+To visualise the individual obserations, graph the means of the plot-level relative source contributions for each plot, grouped by source:
+
+```{r}
+ggplot(proportions.single, aes(source, mean))+
+  geom_point()
+```
+
+## Graph the mean estimates
+The model also calculated mean proportions of each source denoted by _mean. Extract the four mean estimates from **model.single**, create a 'source' column as in proportions.single, and graph them together with the upper and lower credible intervals. 
+
+```{r}
+mean.proportions.single <- rbind(model.single[64,],
+                            model.single[107,],
+                            model.single[150,],
+                            model.single[193,])
+
+mean.proportions.single <- mean.proportions.single %>%
+  mutate (source = case_when(grepl("PAG", variable) ~ "Aboveground",
+                             grepl("PBG", variable) ~ "Belowground",
+                             grepl("POS", variable) ~ "OldSoil",
+                             grepl("PYS", variable) ~ "YoungSoil"))
+
+ggplot(mean.proportions.single, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))
+
+```
+
+## Create a nice looking figure of the mean proporations and credible intervals
+Use `+ylim()` in the ggplot to fix the y-axis limits from 0 to 1 and `+labs()` to add a title, x-axis, and y-axis labels. You can also use `'theme_bw()` or other default theme to make the overall plot appearance a little nicer. 
+
+```{r, plot mean source estimates from model.single, eval=TRUE, echo=TRUE}
+fig1 <- ggplot(mean.proportions.single, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))+
+  ylim(0,1)+
+  labs(x="Respiration Source",y="Relative mean proportion",title="Single 14C Isotope source contribution estimates")+
+  theme_bw()
+
+fig1
+```
+
+# Part 2: Relative Source Contributions in the Dual ^14^C and ^13^C Isotope Model
+
+## Import data
+For part 2, import the data from the dual isotope model.  
+Use `model.single <- read.csv("FILE NAME.csv")` to load the correct dataset.  
+```{r, import the data for model.dual, echo=TRUE}
+# add name of 
+model.dual <- read.csv("Model_14C_13C_output.csv")
+```
+
+## Examine data structure
+
+The model outputs estimated variable values in seperate rows, each row has a name and index according to the parameter definitions in the model. The data is organised by variable name, in alphabetical order.  
+To use the output, we need to extract relevant parameters based on their row position. 
+
+```{r, look at data structure for model.dual}
+# use glimpse() to look at the data structure
+glimpse(model.dual)
+```
+
+```{r, look at the variable names for model.dual}
+# look at the variable names and orders by calling only the variable column
+model.dual$variable
+```
+## Extract the relative AG, BG, OS, YS proporation estimates for each plot from the dual model
+Use the row indices in model.single to extract only the relative flux contributions. Combine them into a single data frame using `rbind()`.  
+Create an object **proportions.dual <-** as above.
+
+```{r, create dataframe of relative proportions in model.dual}
+proportions.dual <- rbind(model.dual[21:62,],
+                            model.dual[64:105,],
+                            model.dual[107:148,],
+                            model.dual[150:191,])
+```
+
+Now create a column called 'source' to group all observations from a single source under the same name and begin plotting the data. The function [grepl()](https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/grep) searches for pattern matches in a string of characters.  
+```{r, create a source column in proportions.dual to group sources}
+proportions.dual <- proportions.dual %>%
+  mutate (source = case_when(grepl("PAG", variable) ~ "Aboveground",
+                             grepl("PBG", variable) ~ "Belowground",
+                             grepl("POS", variable) ~ "OldSoil",
+                             grepl("PYS", variable) ~ "YoungSoil"))
+
+```
+
+## Graph the plot-level estimates 
+To visualise the individual obserations, graph the means of the plot-level relative source contributions for each plot, grouped by source:
+
+```{r}
+ggplot(proportions.dual, aes(source, mean))+
+  geom_point()
+```
+
+## Graph the mean estimates
+The model also calculated mean proportions of each source denoted by _mean. Extract the four mean estimates from **model.single**, create a 'source' column as in proportions.single, and graph them together with the upper and lower credible intervals. 
+
+```{r}
+mean.proportions.dual <- rbind(model.dual[63,],
+                            model.dual[106,],
+                            model.dual[149,],
+                            model.dual[192,])
+
+mean.proportions.dual <- mean.proportions.dual %>%
+  mutate (source = case_when(grepl("PAG", variable) ~ "Aboveground",
+                             grepl("PBG", variable) ~ "Belowground",
+                             grepl("POS", variable) ~ "OldSoil",
+                             grepl("PYS", variable) ~ "YoungSoil"))
+
+ggplot(mean.proportions.dual, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))
+
+```
+
+## Create a nice looking figure of the mean proporations and credible intervals
+Use `+ylim()` in the ggplot to fix the y-axis limits from 0 to 1 and `+labs()` to add a title, x-axis, and y-axis labels. You can also use `'theme_bw()` or other default theme to make the overall plot appearance a little nicer. 
+
+```{r, plot mean source estimates from model.dual, eval=FALSE, echo=FALSE}
+fig2 <- ggplot(mean.proportions.dual, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))+
+  ylim(0,1)+
+  labs(x="Respiration Source",y="Relative mean proportion",title="Dual 14C & 13C Isotope source contribution estimates")+
+  theme_bw()
+
+fig2
+```
+
+# Part 3: Compare the outputs of the single and double isotope model relative proportion estimates
+
+Write a brief summary comparing the outputs from the single and dual isotope partitioning models.  
+*You can repaste the code for nice plots here and name them, eg: fig1 and fig2. Then use `grid.arrange()` to reprint them both here*
+
+```{r, print single and dual model plots, echo=FALSE}
+
+fig1 <- ggplot(mean.proportions.single, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))+
+  ylim(0,1)+
+  labs(x="Respiration Source",y="Relative mean proportion",title="Single 14C Isotope source contribution estimates")+
+  theme_bw()
+
+fig2 <- ggplot(mean.proportions.dual, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))+
+  ylim(0,1)+
+  labs(x="Respiration Source",y="Relative mean proportion",title="Dual 14C & 13C Isotope source contribution estimates")+
+  theme_bw()
+
+grid.arrange(fig1,fig2,ncol=2)
+```
+
+###a. Report the the group means and credible intervals, and the min/max range of the plot-level estimates for each source, from the two models.
+
+###b. What does the addition of the ^13^C isotope change in the relative source estimates? 
+
+###c. Why does the addition of ^13^C end-members change the relative source estimates? 
+
+#The Model Scripts
+
+## The Single ^14^C Isotope Model
+
+####Model start
+mod_14C <- model{  
+
+####Reco field observations at the plot-level  
+for(i in 1:42){*open mixing model sequence*  
+yy[i] ~ dnorm(mu.delta[plot[i]],tau)  
+y.rep[i] ~ dnorm(mu.delta[plot[i]],tau)  
+
+####Calculate the squared difference and Dsum for model fit evaluations 
+sq.diff[i] <- pow(y.rep[i]-yy[i],2)  
+Dsum1[i] <- sum(sq.diff[i])  
+
+####Define mixing model  
+mu.delta[i] <- PAG[i]\*AG + PBG[i]\*BG + PYS[i]\*YS + POS[i]\*OS  
+
+####AG and BG contributions as a portion of total plant contribution  
+PAG[i] <- Pplant[i]\* PAG_plant[i]  
+PBG[i] <- Pplant[i]\* (1-PAG_plant[i])  
+
+####Total plant contributions scaled by plot-level GPP  
+Pplant[i] <- pl\* gpp[i]  
+
+####Total soil contribution as the difference from plant contribution 
+Psoil[i] <- 1- Pplant[i]  
+
+####OS and YS contribtuions as a portion of total soil contribution 
+*on logit scale*  
+logit.POS_soil[i] ~ dnorm(mu.POS[i], tau.old)  
+logit.PAG_plant[i] ~ dnorm(mu.PAG[i], tau.above)  
+
+####Regression model for old soil proportions
+mu.POS[i] <- B[1]+  
+  B[2]\* thaw[i] +  
+  B[3]\* gpps[i] +  
+  B[4]\* vwc[i] +  
+  B[5]\* Ts_surf[i] +  
+  B[6]\* Ts_deep[i] +   
+  B[7]\* vwc[i]\* gpps[i] +  
+  B[8]\* Ts_surf[i]\* gpps[i] +  
+  B[9]\* thaw[i]\* gpps[i] +  
+  B[10]\* thaw[i]\* vwc[i]  
+
+####Regression model for plant above-ground proportions  
+mu.PAG[i] <- A[1]+  
+  A[2]\* thaw[i] +  
+  A[3]\* gpps[i] +  
+  A[4]\* vwc[i] +  
+  A[5]\* Ts_surf[i] +  
+  A[6]\* Ts_deep[i] +   
+  A[7]\* vwc[i]\* gpps[i] +  
+  A[8]\* Ts_surf[i]\* gpps[i] +  
+  A[9]\* thaw[i]\* gpps[i] +  
+  A[10]\* thaw[i]\* vwc[i]  
+
+####Back-transform logit POS and PYS contributions
+logit.POS_temp[i] <- max(-10, min(10, logit.POS_soil[i]))  
+
+POS_soil[i] <- exp(logit.POS_temp[i])/(1+exp(logit.POS_temp[i]))  
+
+logit.PAG_temp[i] <- max(-10, min(10, logit.PAG_plant[i]))  
+
+PAG_plant[i] <- exp(logit.PAG_temp[i])/(1+exp(logit.PAG_temp[i]))  
+
+####Final calculation of proportional OS and YS contributions 
+POS[i] <- Psoil[i]\*POS_soil[i]  
+PYS[i] <- Psoil[i]\*(1-POS_soil[i])  
+
+} *end partitioning model sequence*  
+
+####Estimate end-member values  
+
+POS_mean <- mean(POS[])  
+PYS_mean <- mean(PYS[])  
+PAG_mean <- mean(PAG[])  
+PBG_mean <- mean(PBG[])  
+Pplant_mean <- mean(Pplant[])  
+
+for(p in 1:7){  
+  for(f in 1:6){  
+  AG_ar[p,f] ~ dnorm(mu.delta.ag, tau.ag)  
+  BG_ar[p,f] ~ dnorm(mu.delta.bg, tau.bg)  
+  YS_ar[p,f] ~ dnorm(mu.delta.ys, tau.ys)  
+  OS_ar[p,f] ~ dnorm(mu.delta.os, tau.os)  
+  }}  
+
+AG <- (mu.delta.ag)  
+BG <- (mu.delta.bg)  
+YS <- (mu.delta.ys)  
+OS <- (mu.delta.os)  
+
+####Define relatively non-informative priors 
+
+mu.delta.ag~ dnorm(0, 0.0000001)  
+mu.delta.bg~ dnorm(0, 0.0000001)  
+mu.delta.ys~ dnorm(0, 0.0000001)  
+mu.delta.os~ dnorm(0, 0.0000001)  
+
+tau <- pow(sig,-2)  
+sig ~ dunif(0,100)  
+
+tau.ag<- pow(sig.ag,-2)  
+sig.ag ~ dunif(0,100)  
+
+tau.bg<- pow(sig.bg,-2)  
+sig.bg ~ dunif(0,100)  
+
+tau.ys<- pow(sig.ys,-2)  
+sig.ys ~ dunif(0,100)  
+
+tau.os<- pow(sig.os,-2)  
+sig.os ~ dunif(0,100)  
+
+tau.old<- pow(sig.old,-2)  
+sig.old ~ dunif(0,100)  
+
+tau.above<- pow(sig.above,-2)  
+sig.above ~ dunif(0,100)  
+
+pl_max <- 1/GPPmax  
+pl ~ dunif(0, pl_max)  
+
+for (k in 1:10){  
+    B[k] ~ dnorm(0,0.001)  
+    A[k] ~ dnorm(0,0.001)  
+}  
+
+Dsum <- sum(sq.diff[])  
+}  
+
+####Model End
+
+##The Dual ^14^C and ^13^C Isotope Model
+
+####Model start
+mod.dual<-'model{
+
+####Reco field observations at the plot-level
+*Note the increase in the i index and the additional iso[i] to represent multiple isotopes*  
+for(i in 1:84){ *open mixing model sequence*  
+yy[i] ~ dnorm(mu.delta[plot[i], iso[i]],tau[iso[i]])  
+y.rep[i] ~ dnorm(mu.delta[plot[i], iso[i]],tau[iso[i]])  
+
+r[i] <- yy[i]- mu.delta[plot[i],iso[i]]  
+
+}  
+####Squared diff and Dsum??
+
+####Define mixing model
+for(p in 1:42){ *plots*  
+for(i in 1:2){ *isotopes*  
+
+mu.delta[p,i] <- PAG[p]\*AG[i] + PBG[p]\*BG[i] + PYS[p]\*YS[i] + POS[p]\*OS[i]  
+}  
+
+####AG and BG contributions as a proportion of total plant contribution
+PAG[p] <- Pplant[p]* PAG_plant[p]  
+PBG[p] <- Pplant[p]* (1-PAG_plant[p])  
+
+####Total plant contributions scaled by plot-level GPP
+Pplant[p] <- pl* gpp[p]  
+
+####Total soil contribution as the difference from plant contribution
+Psoil[p] <- 1- Pplant[p]  
+
+####OS and YS contribtuions as a portion of total soil contribution on
+**logit scale**  
+logit.POS_soil[p] ~ dnorm(mu.POS[p], tau.old)  
+logit.PAG_plant[p] ~ dnorm(mu.PAG[p], tau.above)  
+
+####Regression model for old soil proportions  
+mu.POS[p] <- B[1]+  
+B[2]\* thaw[p] +  
+B[3]\* gpps[p] +  
+B[4]\* vwc[p] +  
+B[5]\* Ts_surf[p] +  
+B[6]\* Ts_deep[p] +    
+B[7]\* vwc[p]\* gpps[p] +  
+B[8]\* Ts_surf[p]\* gpps[p] +  
+B[9]\* thaw[p]\* gpps[p] +  
+B[10]\* thaw[p]\* vwc[p]  
+
+####Regression model for plant above-ground contributions  
+mu.PAG[p] <- A[1]+  
+A[2]\* thaw[p] +  
+A[3]\* gpps[p] +  
+A[4]\* vwc[p] +  
+A[5]\* Ts_surf[p] +  
+A[6]\* Ts_deep[p] +   
+A[7]\* vwc[p]\* gpps[p] +  
+A[8]\* Ts_surf[p]\* gpps[p] +  
+A[9]\* thaw[p]\* gpps[p] +  
+A[10]\* thaw[p]\* vwc[p]   
+
+####Back-transform logit POS and PYS contributions
+logit.POS_temp[p] <- max(-10, min(10, logit.POS_soil[p]))  
+POS_soil[p] <- exp(logit.POS_temp[p])/(1+exp(logit.POS_temp[p]))  
+logit.PAG_temp[p] <- max(-10, min(10, logit.PAG_plant[p]))  
+PAG_plant[p] <- exp(logit.PAG_temp[p])/(1+exp(logit.PAG_temp[p]))  
+
+####Final calculation of proportional OS and YS contributions
+POS[p] <- Psoil[p]*POS_soil[p]  
+PYS[p] <- Psoil[p]*(1-POS_soil[p])  
+} 
+
+####Estimate end-member values
+POS_mean <- mean(POS[])  
+PYS_mean <- mean(PYS[])  
+PAG_mean <- mean(PAG[])  
+PBG_mean <- mean(PBG[])  
+Pplant_mean <- mean(Pplant[])  
+
+for(p in 1:7){  
+for(f in 1:6){  
+for(i in 1:2){*isotopes*  
+
+AG_ar[p,f,i] ~ dnorm(mu.delta.ag[i], tau.ag[i])  
+BG_ar[p,f,i] ~ dnorm(mu.delta.bg[i], tau.bg[i])  
+YS_ar[p,f,i] ~ dnorm(mu.delta.ys[i], tau.ys[i])  
+OS_ar[p,f,i] ~ dnorm(mu.delta.os[i], tau.os[i])  
+}}}  
+
+for (i in 1:2){ #isotope  
+AG[i] <- (mu.delta.ag[i])  
+BG[i] <- (mu.delta.bg[i])  
+YS[i] <- (mu.delta.ys[i])  
+OS[i] <- (mu.delta.os[i])  
+
+####Define relatively non-informative priors
+mu.delta.ag[i]~ dnorm(0, 0.0000001)  
+mu.delta.bg[i]~ dnorm(0, 0.0000001)  
+mu.delta.ys[i]~ dnorm(0, 0.0000001)  
+mu.delta.os[i]~ dnorm(0, 0.0000001)  
+
+tau[i] <- pow(sig[i],-2)  
+sig[i] ~ dunif(0,100)  
+
+tau.ag[i]<- pow(sig.ag[i],-2)  
+sig.ag[i] ~ dunif(0,100)  
+
+tau.bg[i]<- pow(sig.bg[i],-2)  
+sig.bg[i] ~ dunif(0,100)  
+
+tau.ys[i]<- pow(sig.ys[i],-2)  
+sig.ys[i] ~ dunif(0,100)  
+
+tau.os[i]<- pow(sig.os[i],-2)  
+sig.os[i] ~ dunif(0,100)  
+}  
+
+tau.old<- pow(sig.old,-2)  
+sig.old ~ dunif(0,100)  
+
+tau.above<- pow(sig.above,-2)  
+sig.above ~ dunif(0,100)  
+
+pl_max <- 1/GPPmax  
+pl ~ dunif(0, pl_max)  
+
+for (k in 1:10){  
+B[k] ~ dnorm(0,0.001)  
+A[k] ~ dnorm(0,0.001)  
+
+}  
+}  
+####Model End
+
+#References
+*Pegoraro EF, Mauritz ME, Ogle K, et al (2020) Lower soil moisture and deep soil temperatures in thermokarst features increase old soil carbon loss after 10 years of experimental permafrost warming. Global Change Biology 27: 1293-1308. https://doi.org/https://doi.org/10.1111/gcb.15481  
+*[JAGS](https://mcmc-jags.sourceforge.io/): https://mcmc-jags.sourceforge.io/  
+*[R2jags](https://cran.r-project.org/web/packages/R2jags/index.html): https://cran.r-project.org/web/packages/R2jags/index.html  
+*[Installing R2JAGS](https://blogs.uoregon.edu/bayesclub/tag/r2jags/): https://blogs.uoregon.edu/bayesclub/tag/r2jags/  
+
