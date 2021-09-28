@@ -1,0 +1,261 @@
+---
+title: 'Radiocarbon Course: Isotopic Partitioning Models'
+author: "Marguerite Mauritz"
+date: "21 August 2021"
+output:
+  html_document:
+    toc: yes
+    toc_depth: 2
+    toc_float: yes
+  pdf_document:
+    toc: yes
+    toc_depth: '2'
+---
+
+#Broad Questions
+1. What is the relative contribution from plant (above-ground and below-ground) and soil (young and old) sources to total ecosystem respiration, using ^14^C to separate sources?  
+2. How does the addition of ^13^C isotopes affect the partitioning model relative contirbutions to respiration? (plant above-and below-ground, soil young and old) 
+
+
+#The Data
+Data from this exercise is based on [Pegoraro et al 2020](https://doi.org/https://doi.org/10.1111/gcb.15481).  
+
+Download and save the following data files in the same directory (folder) as the Rmd code. R will read files from the same path and you will not have to change the working directory: 
+
+```{r, create a table for data files to import, echo=FALSE}
+# won't display in-line in Rmd but will knit to html
+
+# create data to display file info
+table.data <- data.frame(File.Name=c("Model_14C_output.csv", "Model_14C_13C_output.csv"),
+                         File.Description=c("Plot-level relative proportions of AG, BG, OS, YS using 14C partitioning", "Plot-level relative proportions of AG, BG, OS, YS using 14C and 13C partitioning"))
+
+# print table with nicer header names
+knitr::kable(table.data, col.names=gsub("[.]", " ", names(table.data)))
+
+```
+
+# Activity Preparation: Load libraries
+If these libraries are not installed on your computer, install them using `install.packages(dplyr)`,`install.packages(ggplot2)`, etc. or manually install them from the 'Packages' tab in RStudio.  
+```{r, load or install packages, message=FALSE}
+library(dplyr) # organise and examine data
+library(ggplot2) # make plots
+library(gridExtra) # for combining final plots at the end
+```
+
+
+# Part 1: Relative Source Contributions in the Single ^14^C Isotope Model
+
+## Import data
+For part 1, import the data from the single isotope model.  
+Use `model.single <- read.csv("FILE NAME.csv")` to load the correct dataset.  
+```{r, import the data model.single, echo=TRUE}
+# add name of 
+model.single <- read.csv("Model_14C_output.csv")
+```
+
+## Examine data structure
+
+The model outputs estimated variable values in seperate rows, each row has a name and index according to the parameter definitions in the model. The data is organised by variable name, in alphabetical order.  
+To use the output, we need to extract relevant parameters based on their row position. 
+
+```{r, look at data structure for model.single}
+# use glimpse() to look at the data structure
+glimpse(model.single)
+```
+
+```{r, look at the variable names for model.single}
+# look at the variable names and orders by calling only the variable column
+model.single$variable
+```
+
+##Orient to the data
+
+#####a. Refer back to the model definition, what does each variable value and row represent?  
+A:  
+B:  
+etc.  
+
+#####b. What do the columns mean, UL, LL represent?  
+
+## Extract the relative AG, BG, OS, YS proporation estimates for each plot
+Use the row indices in model.single to extract only the data rows that estimate the relative flux contributions. Combine them into a single data frame using `rbind()`.  
+```{r, create dataframe of relative proportions in model.single, echo=TRUE}
+proportions.single <- rbind(model.single[22:63,],
+                            model.single[65:106,],
+                            model.single[108:149,],
+                            model.single[151:192,])
+```
+
+Now create a column called 'source' to group all observations from a single source under the same name and begin plotting the data. The function [grepl()](https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/grep) searches for pattern matches in a string of characters.  
+```{r, create a source column in proportions.single to group sources}
+proportions.single <- proportions.single %>%
+  mutate (source = case_when(grepl("PAG", variable) ~ "Aboveground",
+                             grepl("PBG", variable) ~ "Belowground",
+                             grepl("POS", variable) ~ "OldSoil",
+                             grepl("PYS", variable) ~ "YoungSoil"))
+
+```
+
+## Graph the plot-level estimates 
+To visualise the individual obserations, graph the means of the plot-level relative source contributions for each plot, grouped by source:
+
+```{r}
+ggplot(proportions.single, aes(source, mean))+
+  geom_point()
+```
+
+## Graph the mean estimates
+The model also calculated mean proportions of each source denoted by _mean. Extract the four mean estimates from **model.single**, create a 'source' column as in proportions.single, and graph them together with the upper and lower credible intervals. 
+
+```{r}
+mean.proportions.single <- rbind(model.single[64,],
+                            model.single[107,],
+                            model.single[150,],
+                            model.single[193,])
+
+mean.proportions.single <- mean.proportions.single %>%
+  mutate (source = case_when(grepl("PAG", variable) ~ "Aboveground",
+                             grepl("PBG", variable) ~ "Belowground",
+                             grepl("POS", variable) ~ "OldSoil",
+                             grepl("PYS", variable) ~ "YoungSoil"))
+
+ggplot(mean.proportions.single, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))
+
+```
+
+## Create a nice looking figure of the mean proportions and credible intervals
+Use `+ylim()` in the ggplot to fix the y-axis limits from 0 to 1 and `+labs()` to add a title, x-axis, and y-axis labels. You can also use `'theme_bw()` or other default theme to make the overall plot appearance a little nicer. 
+
+```{r, plot mean source estimates from model.single, eval=TRUE, echo=TRUE}
+fig1 <- ggplot(mean.proportions.single, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))+
+  ylim(0,1)+
+  labs(x="Respiration Source",y="Relative mean proportion",title="Single 14C Isotope source contribution estimates")+
+  theme_bw()
+
+fig1
+```
+
+# Part 2: Relative Source Contributions in the Dual ^14^C and ^13^C Isotope Model
+
+## Import data
+For part 2, import the data from the dual isotope model.  
+Use `model.single <- read.csv("FILE NAME.csv")` to load the correct dataset.  
+```{r, import the data for model.dual, echo=TRUE}
+# add name of 
+model.dual <- read.csv("Model_14C_13C_output.csv")
+```
+
+## Examine data structure
+
+The model outputs estimated variable values in seperate rows, each row has a name and index according to the parameter definitions in the model. The data is organised by variable name, in alphabetical order.  
+To use the output, we need to extract relevant parameters based on their row position. 
+
+```{r, look at data structure for model.dual}
+# use glimpse() to look at the data structure
+glimpse(model.dual)
+```
+
+```{r, look at the variable names for model.dual}
+# look at the variable names and orders by calling only the variable column
+model.dual$variable
+```
+## Extract the relative AG, BG, OS, YS proporation estimates for each plot from the dual model
+Use the row indices in model.single to extract only the relative flux contributions. Combine them into a single data frame using `rbind()`.  
+Create an object **proportions.dual <-** as above.
+
+```{r, create dataframe of relative proportions in model.dual}
+proportions.dual <- rbind(model.dual[21:62,],
+                            model.dual[64:105,],
+                            model.dual[107:148,],
+                            model.dual[150:191,])
+```
+
+Now create a column called 'source' to group all observations from a single source under the same name and begin plotting the data. The function [grepl()](https://www.rdocumentation.org/packages/base/versions/3.6.2/topics/grep) searches for pattern matches in a string of characters.  
+```{r, create a source column in proportions.dual to group sources}
+proportions.dual <- proportions.dual %>%
+  mutate (source = case_when(grepl("PAG", variable) ~ "Aboveground",
+                             grepl("PBG", variable) ~ "Belowground",
+                             grepl("POS", variable) ~ "OldSoil",
+                             grepl("PYS", variable) ~ "YoungSoil"))
+
+```
+
+## Graph the plot-level estimates 
+To visualise the individual obserations, graph the means of the plot-level relative source contributions for each plot, grouped by source:
+
+```{r}
+ggplot(proportions.dual, aes(source, mean))+
+  geom_point()
+```
+
+## Graph the mean estimates
+The model also calculated mean proportions of each source denoted by _mean. Extract the four mean estimates from **model.single**, create a 'source' column as in proportions.single, and graph them together with the upper and lower credible intervals. 
+
+```{r}
+mean.proportions.dual <- rbind(model.dual[63,],
+                            model.dual[106,],
+                            model.dual[149,],
+                            model.dual[192,])
+
+mean.proportions.dual <- mean.proportions.dual %>%
+  mutate (source = case_when(grepl("PAG", variable) ~ "Aboveground",
+                             grepl("PBG", variable) ~ "Belowground",
+                             grepl("POS", variable) ~ "OldSoil",
+                             grepl("PYS", variable) ~ "YoungSoil"))
+
+ggplot(mean.proportions.dual, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))
+
+```
+
+## Create a nice looking figure of the mean proportions and credible intervals
+Use `+ylim()` in the ggplot to fix the y-axis limits from 0 to 1 and `+labs()` to add a title, x-axis, and y-axis labels. You can also use `'theme_bw()` or other default theme to make the overall plot appearance a little nicer. 
+
+```{r, plot mean source estimates from model.dual, eval=FALSE, echo=FALSE}
+fig2 <- ggplot(mean.proportions.dual, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))+
+  ylim(0,1)+
+  labs(x="Respiration Source",y="Relative mean proportion",title="Dual 14C & 13C Isotope source contribution estimates")+
+  theme_bw()
+
+fig2
+```
+
+# Part 3: Compare the outputs of the single and double isotope model relative proportion estimates
+
+##Write a brief summary comparing the outputs from the single and dual isotope partitioning models, using the four prompts below. 
+
+###a. Print the nicely formated plots showing the mean source contributions from the two different models
+
+```{r, print single and dual model plots, echo=FALSE}
+
+fig1 <- ggplot(mean.proportions.single, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))+
+  ylim(0,1)+
+  labs(x="Respiration Source",y="Relative mean proportion",title="Single 14C Isotope \n source contribution estimates")+
+  theme_bw()
+
+fig2 <- ggplot(mean.proportions.dual, aes(source, mean))+
+  geom_point()+
+  geom_pointrange(aes(ymin=LL,ymax=UL))+
+  ylim(0,1)+
+  labs(x="Respiration Source",y="Relative mean proportion",title="Dual 14C & 13C Isotope \n source contribution estimates")+
+  theme_bw()
+
+grid.arrange(fig1,fig2,ncol=2)
+```
+
+
+###b. Report the the group means and credible intervals, and the min/max range of the plot-level estimates for each source, from the two models.
+
+###c. What does the addition of the ^13^C isotope change in the relative source estimates? Why?   
+*It might help to know that in the Bayesian models, two groups are considered significantly different if the mean of one group is not contained by the credible interval of another*
+
+###d. What is the benefit of having additional isotopes in the partitioining model? 
